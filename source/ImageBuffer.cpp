@@ -29,7 +29,6 @@ namespace {
 }
 
 
-
 ImageBuffer::ImageBuffer(int frames)
 	: width(0), height(0), frames(frames), pixels(nullptr)
 {
@@ -62,7 +61,7 @@ void ImageBuffer::Allocate(int width, int height)
 	// is set to zero.
 	if(pixels || !width || !height || !frames)
 		return;
-	
+
 	this->width = width;
 	this->height = height;
 	pixels = new uint32_t[width * height * frames];
@@ -123,7 +122,7 @@ void ImageBuffer::ShrinkToHalfSize()
 {
 	ImageBuffer result(frames);
 	result.Allocate(width / 2, height / 2);
-	
+
 	unsigned char *begin = reinterpret_cast<unsigned char *>(pixels);
 	unsigned char *out = reinterpret_cast<unsigned char *>(result.pixels);
 	// Loop through every line of every frame of the buffer.
@@ -151,20 +150,21 @@ bool ImageBuffer::Read(const string &path, int frame)
 	// First, make sure this is a JPG or PNG file.
 	if(path.length() < 4)
 		return false;
-	
+
 	string extension = path.substr(path.length() - 4);
 	bool isPNG = (extension == ".png" || extension == ".PNG");
 	bool isJPG = (extension == ".jpg" || extension == ".JPG");
 	if(!isPNG && !isJPG)
 		return false;
-	
+
 	if(isPNG && !ReadPNG(path, *this, frame))
 		return false;
 	if(isJPG && !ReadJPG(path, *this, frame))
 		return false;
-	
+
 	// Check if the sprite uses additive blending. Start by getting the index of
 	// the last character before the frame number (if one is specified).
+
 	int pos = path.length() - 4;
 	if(pos > 3 && !path.compare(pos - 3, 3, "@2x"))
 		pos -= 3;
@@ -179,10 +179,9 @@ bool ImageBuffer::Read(const string &path, int frame)
 		if(isPNG || (isJPG && additive == 2))
 			Premultiply(*this, frame, additive);
 	}
+
 	return true;
 }
-
-
 
 namespace {
 	bool ReadPNG(const string &path, ImageBuffer &buffer, int frame)
@@ -191,28 +190,28 @@ namespace {
 		File file(path);
 		if(!file)
 			return false;
-		
+
 		// Set up libpng.
 		png_struct *png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 		if(!png)
 			return false;
-		
+
 		png_info *info = png_create_info_struct(png);
 		if(!info)
 		{
 			png_destroy_read_struct(&png, nullptr, nullptr);
 			return false;
 		}
-		
+
 		if(setjmp(png_jmpbuf(png)))
 		{
 			png_destroy_read_struct(&png, &info, nullptr);
 			return false;
 		}
-		
+
 		png_init_io(png, file);
 		png_set_sig_bytes(png, 0);
-		
+
 		png_read_info(png, info);
 		int width = png_get_image_width(png, info);
 		int height = png_get_image_height(png, info);
@@ -224,11 +223,11 @@ namespace {
 			png_destroy_read_struct(&png, &info, nullptr);
 			return false;
 		}
-		
+
 		// Adjust settings to make sure the result will be a BGRA file.
 		int colorType = png_get_color_type(png, info);
 		int bitDepth = png_get_bit_depth(png, info);
-		
+
 		png_set_strip_16(png);
 		png_set_packing(png);
 		if(colorType == PNG_COLOR_TYPE_PALETTE)
@@ -237,42 +236,41 @@ namespace {
 			png_set_expand_gray_1_2_4_to_8(png);
 		if(colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA)
 			png_set_gray_to_rgb(png);
-		if(colorType & PNG_COLOR_MASK_COLOR)
-			png_set_bgr(png);
 		// Let libpng handle any interlaced image decoding.
 		png_set_interlace_handling(png);
 		png_read_update_info(png, info);
-		
+
 		// Read the file.
 		vector<png_byte *> rows(height, nullptr);
 		for(int y = 0; y < height; ++y)
 			rows[y] = reinterpret_cast<png_byte *>(buffer.Begin(y, frame));
-		
+
 		png_read_image(png, &rows.front());
-		
+
 		// Clean up. The file will be closed automatically.
 		png_destroy_read_struct(&png, &info, nullptr);
-		
+
 		return true;
 	}
-	
-	
-	
+
+
+
 	bool ReadJPG(const string &path, ImageBuffer &buffer, int frame)
 	{
 		File file(path);
 		if(!file)
 			return false;
-		
+
+
 		jpeg_decompress_struct cinfo;
 		struct jpeg_error_mgr jerr;
 		cinfo.err = jpeg_std_error(&jerr);
 		jpeg_create_decompress(&cinfo);
-		
+
 		jpeg_stdio_src(&cinfo, file);
 		jpeg_read_header(&cinfo, true);
-		cinfo.out_color_space = JCS_EXT_BGRA;
-		
+		cinfo.out_color_space = JCS_RGB;
+
 		jpeg_start_decompress(&cinfo);
 		int width = cinfo.image_width;
 		int height = cinfo.image_height;
@@ -285,44 +283,58 @@ namespace {
 			jpeg_destroy_decompress(&cinfo);
 			return false;
 		}
-		
+
 		// Read the file.
 		vector<JSAMPLE *> rows(height, nullptr);
 		for(int y = 0; y < height; ++y)
 			rows[y] = reinterpret_cast<JSAMPLE *>(buffer.Begin(y, frame));
-		
+
 		while(height)
 			height -= jpeg_read_scanlines(&cinfo, &rows.front() + cinfo.output_scanline, height);
-		
+
 		jpeg_finish_decompress(&cinfo);
 		jpeg_destroy_decompress(&cinfo);
-		
+
+		// Expand RGB to RGBA
+		for (unsigned int y = 0; y < cinfo.image_height; y++)
+		{
+			auto pptr = reinterpret_cast<uint8_t*>(buffer.Begin(y, frame));
+			for(int idx = width - 1; idx >= 0; --idx)
+			//for(int idx = 0; idx < width; ++idx)
+			{
+				pptr[idx * 4 + 0] = pptr[idx * 3 + 0];
+				pptr[idx * 4 + 1] = pptr[idx * 3 + 1];
+				pptr[idx * 4 + 2] = pptr[idx * 3 + 2];
+				pptr[idx * 4 + 3] = static_cast<unsigned char>(0xFF);
+			}
+		}
+
 		return true;
 	}
-	
-	
-	
+
+
+
 	void Premultiply(ImageBuffer &buffer, int frame, int additive)
 	{
 		for(int y = 0; y < buffer.Height(); ++y)
 		{
 			uint32_t *it = buffer.Begin(y, frame);
-			
+
 			for(uint32_t *end = it + buffer.Width(); it != end; ++it)
 			{
 				uint64_t value = *it;
 				uint64_t alpha = (value & 0xFF000000) >> 24;
-				
+
 				uint64_t red = (((value & 0xFF0000) * alpha) / 255) & 0xFF0000;
 				uint64_t green = (((value & 0xFF00) * alpha) / 255) & 0xFF00;
 				uint64_t blue = (((value & 0xFF) * alpha) / 255) & 0xFF;
-				
+
 				value = red | green | blue;
 				if(additive == 1)
 					alpha >>= 2;
 				if(additive != 2)
 					value |= (alpha << 24);
-				
+
 				*it = static_cast<uint32_t>(value);
 			}
 		}
