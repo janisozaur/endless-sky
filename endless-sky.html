@@ -286,6 +286,16 @@
           getPreloadedPackage: function() { return Module.downloadedData; }
       };
 
+      // returns true if this browser, otherwise a string for an error message.
+      function supported() {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        if (!gl) {
+          return 'your browser does not support WebGL2.'
+        } else {
+          return true
+        }
+      }
+
       async function addMainScriptTag() {
         // If no dataversion.js script found, force download with date string
         const versionString = typeof endlessSkyDataVersion === 'undefined' ? Date() : endlessSkyDataVersion;
@@ -295,7 +305,12 @@
         document.body.appendChild(tag);
       }
 
-    addMainScriptTag();
+      const why = supported();
+      if (why === true) {
+        addMainScriptTag();
+      } else {
+        progressText.textContent = `Not supported because ${why}`
+      }
     </script>
   </body>
 </html>
