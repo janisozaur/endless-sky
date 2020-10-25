@@ -20,6 +20,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #include "DataFile.h"
 #include "DataNode.h"
 #include "Dialog.h"
+#include "Files.h"
 #include "Font.h"
 #include "FrameTimer.h"
 #include "GameData.h"
@@ -53,9 +54,30 @@ void PrintHelp();
 void PrintVersion();
 void GameLoop(PlayerInfo& player, Conversation& conversation, bool& debugMode);
 Conversation LoadConversation();
+int restOfMain(bool loadOnly, bool debugMode, Conversation conversation);
 #ifdef _WIN32
 void InitConsole();
 #endif
+
+struct restOfMainArgs
+{
+    bool debugMode;
+    bool loadOnly;
+    Conversation conversation;
+} args;
+int loadIndex = 0;
+
+void loadIter(void* data)
+{
+    bool done = GameData::LoadALittle(loadIndex);
+    if (!done) {
+        loadIndex++;
+        emscripten_async_call(loadIter, NULL, 20);
+    } else {
+        cout << "Rest of main callback happening" << endl;
+        restOfMain(args.loadOnly, args.debugMode, args.conversation);
+    }
+}
 
 // Entry point for the EndlessSky executable
 int main(int argc, char* argv[])
@@ -106,16 +128,26 @@ int main(int argc, char* argv[])
     }
 
 #ifdef __EMSCRIPTEN__
-    auto blocker = [](void* data) {
-        GameData::BeginLoad((const char *const *)data);
-    };
-    emscripten_push_main_loop_blocker(blocker, (void*)argv);
+    Files::Init(argv);
+
+    args.loadOnly = loadOnly;
+    args.debugMode = debugMode;
+    args.conversation = conversation;
+
+    cout << "starting our wild async adventure..." << endl;
+    emscripten_async_call(loadIter, NULL, 0);
+    return 0;
 #else
     // Begin loading the game data. Exit early if we are not using the UI.
     if (!GameData::BeginLoad(argv))
         return 0;
+    return restOfMain(loadOnly, debugMode, conversation);
 #endif // __EMSCRIPTEN__
+}
 
+int restOfMain(bool loadOnly, bool debugMode, Conversation conversation)
+{
+    cout << "Rest of main running" << endl;
     // Load player data, including reference-checking.
     PlayerInfo player;
     bool checkedReferences = player.LoadRecent();

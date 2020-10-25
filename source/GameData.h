@@ -59,6 +59,7 @@ class System;
 class GameData {
 public:
 	static bool BeginLoad(const char * const *argv);
+	static bool LoadALittle(int i);
 	// Check for objects that are referred to but never defined.
 	static void CheckReferences();
 	static void LoadShaders();

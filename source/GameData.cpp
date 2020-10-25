@@ -60,6 +60,10 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #include <utility>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#    include <emscripten.h>
+#endif
+
 class Sprite;
 
 using namespace std;
@@ -120,51 +124,84 @@ namespace {
 	const Government *playerGovernment = nullptr;
 }
 
-
-
-bool GameData::BeginLoad(const char * const *argv)
+// BeginLoad is a coroutine now so it needs local state in a struct
+struct loadState
 {
 	bool printShips = false;
 	bool printWeapons = false;
 	bool debugMode = false;
+	map<string, shared_ptr<ImageSet>> images;
+	map<string, shared_ptr<ImageSet>>::iterator it;
+	const char * const *argv;
+	int imageCounter = 0;
+} ls;
+
+bool GameData::BeginLoad(const char * const *argv)
+{
 	for(const char * const *it = argv + 1; *it; ++it)
 	{
 		if((*it)[0] == '-')
 		{
 			string arg = *it;
 			if(arg == "-s" || arg == "--ships")
-				printShips = true;
+				ls.printShips = true;
 			if(arg == "-w" || arg == "--weapons")
-				printWeapons = true;
+				ls.printWeapons = true;
 			if(arg == "-d" || arg == "--debug")
-				debugMode = true;
+				ls.debugMode = true;
 			continue;
 		}
 	}
 	Files::Init(argv);
 
-	// Initialize the list of "source" folders based on any active plugins.
-	LoadSources();
+	for (int i = 0;; i++) {
+		if (LoadALittle(i)) break;
+	}
+	return !(ls.printShips || ls.printWeapons);
+}
 
-	// Now, read all the images in all the path directories. For each unique
-	// name, only remember one instance, letting things on the higher priority
-	// paths override the default images.
-	map<string, shared_ptr<ImageSet>> images = FindImages();
 
+// return whether loading is done
+bool GameData::LoadALittle(int i)
+{
+	if (i == 0) {
+		// Initialize the list of "source" folders based on any active plugins.
+		LoadSources();
+
+		// Now, read all the images in all the path directories. For each unique
+		// name, only remember one instance, letting things on the higher priority
+		// paths override the default images.
+		
+		// This line seems to take 5% of loading time.
+		ls.images = FindImages();
+		ls.it = ls.images.begin();
+		cout << ls.images.size() << endl;
+		ls.imageCounter = 0;
+
+		return false;
+	}
+
+	int LOAD_PER_LOOP = 10;
 	// From the name, strip out any frame number, plus the extension.
-	for(const auto &it : images)
+	// This loop takes 70% of loading time
+	if (ls.imageCounter < ls.images.size())
 	{
-		// This should never happen, but just in case:
-		if(!it.second)
-			continue;
+		cout << "counter:" << ls.imageCounter << endl;
+		for (int i=0; ls.it != ls.images.end() && i < LOAD_PER_LOOP; i++, ls.it++, ls.imageCounter++)
+		{
+			// This should never happen, but just in case:
+			if(!ls.it->second)
+				continue;
 
-		// Check that the image set is complete.
-		it.second->Check();
-		// For landscapes, remember all the source files but don't load them yet.
-		if(ImageSet::IsDeferred(it.first))
-			deferred[SpriteSet::Get(it.first)] = it.second;
-		else
-			spriteQueue.Add(it.second);
+			// Check that the image set is complete.
+			ls.it->second->Check();
+			// For landscapes, remember all the source files but don't load them yet.
+			if(ImageSet::IsDeferred(ls.it->first))
+				deferred[SpriteSet::Get(ls.it->first)] = ls.it->second;
+			else
+				spriteQueue.Add(ls.it->second);
+		}
+		return false;
 	}
 
 	// Generate a catalog of music files.
@@ -177,7 +214,7 @@ bool GameData::BeginLoad(const char * const *argv)
 		// override things in folders later in the path.
 		vector<string> dataFiles = Files::RecursiveList(source + "data/");
 		for(const string &path : dataFiles)
-			LoadFile(path, debugMode);
+			LoadFile(path, ls.debugMode);
 	}
 
 	// Now that all the stars are loaded, update the neighbor lists.
@@ -201,13 +238,12 @@ bool GameData::BeginLoad(const char * const *argv)
 
 	politics.Reset();
 
-	if(printShips)
+	if(ls.printShips)
 		PrintShipTable();
-	if(printWeapons)
+	if(ls.printWeapons)
 		PrintWeaponTable();
-	return !(printShips || printWeapons);
+	return true;
 }
-
 
 
 // Check for objects that are referred to but never defined.
