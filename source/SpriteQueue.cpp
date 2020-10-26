@@ -21,6 +21,11 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 #include <algorithm>
 #include <functional>
 
+
+#ifdef __EMSCRIPTEN__
+#    include <emscripten.h>
+#endif
+
 using namespace std;
 
 
@@ -72,7 +77,15 @@ void SpriteQueue::Add(const shared_ptr<ImageSet> &images)
 #ifndef ES_NO_THREADS
 	readCondition.notify_one();
 #else
+#ifdef __EMSCRIPTEN__
+    auto blocker = [](void* data) {
+		auto sq = static_cast<SpriteQueue*>(data);
+		sq->operator()();
+    };
+    emscripten_async_call(blocker, (void*)this, 0);
+#else
 	this->operator()();
+#endif // __EMSCRIPTEN__
 #endif // ES_NO_THREADS
 }
 

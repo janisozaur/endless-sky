@@ -104,11 +104,9 @@ int main(int argc, char* argv[])
         else if (arg == "-p" || arg == "--parse-save")
             loadOnly = true;
     }
-
     // Begin loading the game data. Exit early if we are not using the UI.
     if (!GameData::BeginLoad(argv))
         return 0;
-
     // Load player data, including reference-checking.
     PlayerInfo player;
     bool checkedReferences = player.LoadRecent();
