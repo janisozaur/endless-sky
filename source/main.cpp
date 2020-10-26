@@ -104,18 +104,9 @@ int main(int argc, char* argv[])
         else if (arg == "-p" || arg == "--parse-save")
             loadOnly = true;
     }
-
-#ifdef __EMSCRIPTEN__
-    auto blocker = [](void* data) {
-        GameData::BeginLoad((const char *const *)data);
-    };
-    emscripten_push_main_loop_blocker(blocker, (void*)argv);
-#else
     // Begin loading the game data. Exit early if we are not using the UI.
     if (!GameData::BeginLoad(argv))
         return 0;
-#endif // __EMSCRIPTEN__
-
     // Load player data, including reference-checking.
     PlayerInfo player;
     bool checkedReferences = player.LoadRecent();
