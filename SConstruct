@@ -69,6 +69,7 @@ if env["mode"] == "emcc":
 		"-s", "WASM_MEM_MAX=2147483648", # 2GB
 		"-s", "INITIAL_MEMORY=838860800", # 800MB
 		"-s", "ALLOW_MEMORY_GROWTH=1",
+		"-s", "EXTRA_EXPORTED_RUNTIME_METHODS=['callMain']",
 		"--preload-file", "data",
 		"--preload-file", "images",
 		"--preload-file", "sounds",

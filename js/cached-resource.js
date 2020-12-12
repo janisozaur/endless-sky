@@ -57,7 +57,6 @@
         }
         console.log('Out of date resource, redownloading', this.resourceUrl)
         console.log('required version', version, 'but had version', cachedVersion, 'stored');
-        return cachedData;
       }
       let data;
 
