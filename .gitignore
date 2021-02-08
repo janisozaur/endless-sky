@@ -2,6 +2,7 @@
 /endless-sky
 *.exe
 *.lnk
+output
 
 # dlls needed to run the binary
 *.dll
